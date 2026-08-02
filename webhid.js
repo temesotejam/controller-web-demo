@@ -41,10 +41,14 @@ function parseTouchPoint(view, offset) {
 }
 
 function touchOffsetForReport(reportId, view) {
-  // WebHIDのevent.dataにはReport ID自体は含まれない。
-  // USB 0x01は共通入力部が先頭、Bluetooth 0x31は2バイトのヘッダー後に共通入力部が続く。
-  if (reportId === 0x01 && view.byteLength >= 63) return 32;
+  // Windows + Bluetoothでは、拡張入力がreportId 0x01 / data 77 bytesとして
+  // WebHIDへ渡されることがある。そのためReport IDよりデータ長を優先する。
+  if (view.byteLength === 77) return 34;
+  if (view.byteLength === 63) return 32;
+
+  // 長さが環境差で変化した場合のフォールバック。
   if (reportId === 0x31 && view.byteLength >= 77) return 34;
+  if (reportId === 0x01 && view.byteLength >= 63 && view.byteLength < 77) return 32;
   return null;
 }
 
