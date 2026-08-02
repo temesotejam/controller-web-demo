@@ -7,9 +7,12 @@ const DS_BT_OUTPUT_PAYLOAD_SIZE = 77;
 const DS_BT_CRC_OFFSET = 73;
 const DS_OUTPUT_CRC32_SEED = 0xa2;
 const DS_BT_ENABLE_FEATURE_REPORT_ID = 0x05;
+const DS_BT_TOUCH0_OFFSET = 33;
+const DS_BT_TOUCH1_OFFSET = 37;
 
 let dsBtOutputSequence = 1;
 let dsBtEnhancedInputSeen = false;
+let dsCurrentInputReportId = null;
 
 function createBluetoothModeStatusUi() {
   const connectButton = document.getElementById("hidConnectButton");
@@ -109,19 +112,41 @@ async function enableDualSenseBluetoothEnhancedInput(device) {
   return featureRead || fallbackSent;
 }
 
+function formatConfirmedTouch(point, offset) {
+  if (!point) return `${offset}: 読取不可`;
+  return `${offset}(id=${point.id},${point.active ? "ON" : "OFF"},x=${point.x},y=${point.y})`;
+}
+
 createBluetoothModeStatusUi();
 
 // Do not interpret Windows' zero-padded minimal Bluetooth 0x01 report as touch data.
 // In the 0x31 Bluetooth input payload, touch point 0 starts at byte 33.
-const originalTouchOffsetForReport = touchOffsetForReport;
 touchOffsetForReport = function patchedTouchOffsetForReport(reportId, view) {
-  if (reportId === 0x31 && view.byteLength === 77) return 33;
+  if (reportId === 0x31 && view.byteLength === 77) return DS_BT_TOUCH0_OFFSET;
   if (reportId === 0x01 && view.byteLength === 63) return 32;
   return null;
 };
 
+// Replace the broad candidate scan with the two confirmed DualSense touch slots
+// whenever a full Bluetooth 0x31 report is being displayed.
+const originalRenderDiagnostics = renderDiagnostics;
+renderDiagnostics = function confirmedTouchDiagnostics(data) {
+  originalRenderDiagnostics(data);
+  if (dsCurrentInputReportId !== 0x31 || data.byteLength !== 77) return;
+
+  const touch0 = parseTouchPoint(data, DS_BT_TOUCH0_OFFSET);
+  const touch1 = parseTouchPoint(data, DS_BT_TOUCH1_OFFSET);
+  const output = document.getElementById("hidCandidateOffsets");
+  if (output) {
+    output.textContent = `第1: ${formatConfirmedTouch(touch0, DS_BT_TOUCH0_OFFSET)} / 第2: ${formatConfirmedTouch(touch1, DS_BT_TOUCH1_OFFSET)}`;
+    const label = output.parentElement?.querySelector("dt");
+    if (label) label.textContent = "確定タッチ点";
+  }
+};
+
 const originalHandleInputReport = handleInputReport;
 handleInputReport = function enhancedHandleInputReport(event) {
+  dsCurrentInputReportId = event.reportId;
   originalHandleInputReport(event);
 
   if (event.reportId === 0x31 && event.data.byteLength === 77) {
@@ -143,6 +168,7 @@ attachDevice = async function enhancedAttachDevice(device) {
   device.addEventListener("inputreport", handleInputReport);
 
   dsBtEnhancedInputSeen = false;
+  dsCurrentInputReportId = null;
   await enableDualSenseBluetoothEnhancedInput(device);
 };
 
@@ -152,5 +178,6 @@ if (typeof hidDevice !== "undefined" && hidDevice?.opened) {
   hidDevice.removeEventListener("inputreport", handleInputReport);
   hidDevice.addEventListener("inputreport", handleInputReport);
   dsBtEnhancedInputSeen = false;
+  dsCurrentInputReportId = null;
   enableDualSenseBluetoothEnhancedInput(hidDevice).catch(console.error);
 }
