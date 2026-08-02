@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10131a">
+  <title>Controller Web Demo</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">PS4 / PS5 CONTROLLER</p>
+        <h1>Controller Web Demo</h1>
+        <p class="lead">左右翼・L/R入力・推進速度ジェスチャーをブラウザ上で確認するデモです。</p>
+      </div>
+      <div class="status-cluster" aria-live="polite">
+        <span id="controllerBadge" class="badge badge-off">コントローラ未接続</span>
+        <span id="armBadge" class="badge badge-safe">操作無効</span>
+      </div>
+    </header>
+
+    <section class="toolbar panel" aria-label="操作設定">
+      <label>
+        モード
+        <select id="modeSelect">
+          <option value="manual">手動</option>
+          <option value="stabilized">安定化手動</option>
+          <option value="test">試験</option>
+        </select>
+      </label>
+      <button id="enableButton" class="button button-primary" type="button">コントローラを有効化</button>
+      <button id="disableButton" class="button" type="button">無効化</button>
+      <button id="resetEstopButton" class="button" type="button" disabled>急停止を解除</button>
+      <button id="estopButton" class="button button-danger" type="button">急停止</button>
+    </section>
+
+    <section class="dashboard-grid">
+      <article class="panel input-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">LIVE INPUT</p>
+            <h2>コントローラ入力</h2>
+          </div>
+          <p id="controllerName" class="muted">Gamepad API待機中</p>
+        </div>
+
+        <div class="stick-grid">
+          <div class="stick-card">
+            <h3>左スティック Y</h3>
+            <div class="meter vertical"><span id="leftStickFill"></span></div>
+            <output id="leftStickValue">0.00</output>
+            <p>左翼操作値</p>
+          </div>
+          <div class="stick-card">
+            <h3>右スティック Y</h3>
+            <div class="meter vertical"><span id="rightStickFill"></span></div>
+            <output id="rightStickValue">0.00</output>
+            <p>右翼操作値</p>
+          </div>
+        </div>
+
+        <div class="trigger-grid">
+          <div>
+            <div class="label-row"><span>L2</span><output id="l2Value">0.00</output></div>
+            <div class="meter horizontal"><span id="l2Fill"></span></div>
+            <p class="muted">左方向への変化量</p>
+          </div>
+          <div>
+            <div class="label-row"><span>R2</span><output id="r2Value">0.00</output></div>
+            <div class="meter horizontal"><span id="r2Fill"></span></div>
+            <p class="muted">右方向への変化量</p>
+          </div>
+        </div>
+
+        <details class="simulator">
+          <summary>コントローラ未接続時の入力シミュレーター</summary>
+          <div class="sim-grid">
+            <label>左スティック Y<input id="simLeft" type="range" min="-1" max="1" step="0.01" value="0"></label>
+            <label>右スティック Y<input id="simRight" type="range" min="-1" max="1" step="0.01" value="0"></label>
+            <label>L2<input id="simL2" type="range" min="0" max="1" step="0.01" value="0"></label>
+            <label>R2<input id="simR2" type="range" min="0" max="1" step="0.01" value="0"></label>
+          </div>
+        </details>
+      </article>
+
+      <article class="panel touch-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">GESTURE PAD</p>
+            <h2>疑似タッチパッド</h2>
+          </div>
+          <p id="gestureResult" class="gesture-result">ジェスチャーなし</p>
+        </div>
+
+        <div id="touchpad" class="touchpad" role="application" aria-label="推進速度ジェスチャー用タッチパッド">
+          <div class="touch-guide">
+            <span>↑ 増速</span>
+            <span>斜め下へ急停止</span>
+            <span>↓ 減速</span>
+          </div>
+          <div id="touchTrace" class="touch-trace" hidden></div>
+        </div>
+        <p class="hint">下→上で +5%、上→下で −5%。上端から反対側の下端まで斜めに動かすと急停止します。</p>
+      </article>
+
+      <article class="panel propulsion-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">PROPULSION</p>
+            <h2>推進速度設定</h2>
+          </div>
+          <output id="propulsionValue" class="big-value">0%</output>
+        </div>
+        <div class="propulsion-gauge" aria-label="推進速度">
+          <span id="propulsionFill"></span>
+        </div>
+        <div class="quick-controls">
+          <button type="button" data-delta="-5">−5%</button>
+          <button type="button" data-delta="5">+5%</button>
+          <button id="zeroButton" type="button">0%に戻す</button>
+        </div>
+      </article>
+
+      <article class="panel state-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">STATE</p>
+            <h2>アプリ内部状態</h2>
+          </div>
+        </div>
+        <dl class="state-list">
+          <div><dt>状態</dt><dd id="stateValue">DISABLED</dd></div>
+          <div><dt>モード</dt><dd id="modeValue">MANUAL</dd></div>
+          <div><dt>急停止</dt><dd id="estopValue">OFF</dd></div>
+          <div><dt>最後の操作</dt><dd id="lastActionValue">起動</dd></div>
+        </dl>
+      </article>
+    </section>
+
+    <section class="panel notes">
+      <h2>ブラウザ版の制約</h2>
+      <p>Gamepad APIでスティック・トリガーは取得できますが、DualShock 4 / DualSense中央タッチパッドの座標はブラウザでは取得できない場合があります。そのため、このデモでは画面上の疑似タッチパッドでジェスチャー判定を確認します。</p>
+    </section>
+  </main>
+  <script src="app.js" defer></script>
+</body>
+</html>
