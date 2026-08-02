@@ -105,6 +105,28 @@
         <p class="hint">下→上で +5%、上→下で −5%。上端から反対側の下端まで斜めに動かすと急停止します。</p>
       </article>
 
+      <article class="panel hid-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">EXPERIMENTAL WEBHID</p>
+            <h2>DualSense実機タッチパッド</h2>
+          </div>
+          <span id="hidBadge" class="badge badge-off">WebHID未接続</span>
+        </div>
+        <button id="hidConnectButton" class="button button-primary" type="button">DualSenseへWebHID接続</button>
+        <p class="hint">まずUSBケーブルで接続し、ChromeまたはEdgeでボタンを押してデバイスアクセスを許可してください。</p>
+        <div id="hidTouchSurface" class="hid-touch-surface" aria-label="DualSenseタッチ座標表示">
+          <span id="hidTouchMarker" class="hid-touch-marker" hidden></span>
+        </div>
+        <dl class="state-list hid-state-list">
+          <div><dt>デバイス</dt><dd id="hidDeviceName">未接続</dd></div>
+          <div><dt>入力レポート</dt><dd id="hidReportValue">待機中</dd></div>
+          <div><dt>タッチ状態</dt><dd id="hidTouchState">待機中</dd></div>
+          <div><dt>X座標</dt><dd id="hidTouchX">—</dd></div>
+          <div><dt>Y座標</dt><dd id="hidTouchY">—</dd></div>
+        </dl>
+      </article>
+
       <article class="panel propulsion-panel">
         <div class="section-heading">
           <div>
@@ -141,9 +163,10 @@
 
     <section class="panel notes">
       <h2>ブラウザ版の制約</h2>
-      <p>Gamepad APIでスティック・トリガーは取得できますが、DualShock 4 / DualSense中央タッチパッドの座標はブラウザでは取得できない場合があります。そのため、このデモでは画面上の疑似タッチパッドでジェスチャー判定を確認します。</p>
+      <p>通常のGamepad APIではDualSense中央タッチパッドの座標を取得できません。この実験版ではChrome / EdgeのWebHIDを使ってUSB入力レポートを直接読みます。WebHIDが使えない環境では、従来どおり画面上の疑似タッチパッドを使用できます。</p>
     </section>
   </main>
   <script src="app.js" defer></script>
+  <script src="webhid.js" defer></script>
 </body>
 </html>
