@@ -112,9 +112,10 @@ async function enableDualSenseBluetoothEnhancedInput(device) {
 createBluetoothModeStatusUi();
 
 // Do not interpret Windows' zero-padded minimal Bluetooth 0x01 report as touch data.
+// In the 0x31 Bluetooth input payload, touch point 0 starts at byte 33.
 const originalTouchOffsetForReport = touchOffsetForReport;
 touchOffsetForReport = function patchedTouchOffsetForReport(reportId, view) {
-  if (reportId === 0x31 && view.byteLength === 77) return 34;
+  if (reportId === 0x31 && view.byteLength === 77) return 33;
   if (reportId === 0x01 && view.byteLength === 63) return 32;
   return null;
 };
