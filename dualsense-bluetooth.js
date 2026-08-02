@@ -1,10 +1,12 @@
 // Enables the DualSense full Bluetooth input report (0x31) over WebHID.
-// WebHID sendReport() receives the report ID separately, so the payload is 77 bytes.
+// Reading feature report 0x05 is the primary mode switch. A valid 0x31 output
+// report is retained as a fallback for environments that still remain in 0x01 mode.
 
 const DS_BT_OUTPUT_REPORT_ID = 0x31;
 const DS_BT_OUTPUT_PAYLOAD_SIZE = 77;
 const DS_BT_CRC_OFFSET = 73;
 const DS_OUTPUT_CRC32_SEED = 0xa2;
+const DS_BT_ENABLE_FEATURE_REPORT_ID = 0x05;
 
 let dsBtOutputSequence = 1;
 let dsBtEnhancedInputSeen = false;
@@ -43,7 +45,6 @@ function makeCrc32Table() {
 const dsBtCrc32Table = makeCrc32Table();
 
 function computeDualSenseBluetoothCrc(payload) {
-  // Linux hid-playstation signs: seed 0xA2 + report ID 0x31 + payload before CRC.
   let crc = 0xffffffff;
   const update = (byte) => {
     crc = dsBtCrc32Table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
@@ -57,37 +58,55 @@ function computeDualSenseBluetoothCrc(payload) {
 
 function buildBluetoothEnableReport() {
   const payload = new Uint8Array(DS_BT_OUTPUT_PAYLOAD_SIZE);
-
-  // Bluetooth header: sequence/tag followed by the 47-byte common output block.
   payload[0] = (dsBtOutputSequence & 0x0f) << 4;
   dsBtOutputSequence = (dsBtOutputSequence + 1) & 0x0f;
   payload[1] = 0x10;
-
-  // Mark compatible vibration/haptics fields as valid while commanding zero output.
-  // Sending a valid Bluetooth output report switches DualSense from minimal 0x01 input
-  // to the full 0x31 input report containing motion and touchpad data.
   payload[2] = 0x03;
 
   const crc = computeDualSenseBluetoothCrc(payload);
-  const view = new DataView(payload.buffer);
-  view.setUint32(DS_BT_CRC_OFFSET, crc, true);
+  new DataView(payload.buffer).setUint32(DS_BT_CRC_OFFSET, crc, true);
   return payload;
 }
 
-async function enableDualSenseBluetoothEnhancedInput(device) {
+async function readDualSenseEnableFeatureReport(device) {
   if (!device?.opened) return false;
 
-  setBluetoothModeStatus("初期化レポート送信中…");
+  setBluetoothModeStatus("Feature Report 0x05読取中…");
   try {
-    const payload = buildBluetoothEnableReport();
-    await device.sendReport(DS_BT_OUTPUT_REPORT_ID, payload);
-    setBluetoothModeStatus("初期化送信済み、0x31入力待機中");
+    const report = await device.receiveFeatureReport(DS_BT_ENABLE_FEATURE_REPORT_ID);
+    setBluetoothModeStatus(`Feature Report 0x05読取成功（${report.byteLength} bytes）、0x31入力待機中`);
     return true;
   } catch (error) {
-    console.error("Failed to enable DualSense Bluetooth enhanced input", error);
-    setBluetoothModeStatus(`送信失敗: ${error.message}`, true);
+    console.error("Failed to read DualSense feature report 0x05", error);
+    setBluetoothModeStatus(`Feature Report 0x05読取失敗: ${error.message}`, true);
     return false;
   }
+}
+
+async function sendDualSenseBluetoothFallbackReport(device) {
+  if (!device?.opened) return false;
+
+  try {
+    await device.sendReport(DS_BT_OUTPUT_REPORT_ID, buildBluetoothEnableReport());
+    return true;
+  } catch (error) {
+    console.error("Failed to send DualSense Bluetooth fallback report", error);
+    return false;
+  }
+}
+
+async function enableDualSenseBluetoothEnhancedInput(device) {
+  const featureRead = await readDualSenseEnableFeatureReport(device);
+
+  // Keep the output-report path as a fallback. It is harmless when 0x31 input
+  // has already started and helps on some firmware/host combinations.
+  const fallbackSent = await sendDualSenseBluetoothFallbackReport(device);
+  if (!featureRead && fallbackSent) {
+    setBluetoothModeStatus("0x31フォールバック送信済み、入力待機中");
+  } else if (!featureRead && !fallbackSent) {
+    setBluetoothModeStatus("初期化に失敗しました", true);
+  }
+  return featureRead || fallbackSent;
 }
 
 createBluetoothModeStatusUi();
@@ -110,7 +129,7 @@ handleInputReport = function enhancedHandleInputReport(event) {
       setBluetoothModeStatus("0x31拡張入力を受信中");
     }
   } else if (event.reportId === 0x01 && event.data.byteLength === 77 && !dsBtEnhancedInputSeen) {
-    setBluetoothModeStatus("最小0x01入力のまま（再初期化してください）", true);
+    setBluetoothModeStatus("最小0x01入力のまま（WebHIDを再接続してください）", true);
   }
 };
 
@@ -118,7 +137,6 @@ const originalAttachDevice = attachDevice;
 attachDevice = async function enhancedAttachDevice(device) {
   await originalAttachDevice(device);
 
-  // Replace a listener installed before this patch loaded, if necessary.
   device.removeEventListener("inputreport", originalHandleInputReport);
   device.removeEventListener("inputreport", handleInputReport);
   device.addEventListener("inputreport", handleInputReport);
@@ -132,5 +150,6 @@ if (typeof hidDevice !== "undefined" && hidDevice?.opened) {
   hidDevice.removeEventListener("inputreport", originalHandleInputReport);
   hidDevice.removeEventListener("inputreport", handleInputReport);
   hidDevice.addEventListener("inputreport", handleInputReport);
+  dsBtEnhancedInputSeen = false;
   enableDualSenseBluetoothEnhancedInput(hidDevice).catch(console.error);
 }
